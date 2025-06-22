@@ -7,10 +7,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os
 from selenium.webdriver.chrome.options import Options
-import shutil 
 import tempfile
+
 def generate_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%^&*()"
     return ''.join(random.choice(chars) for _ in range(length))
@@ -65,7 +64,6 @@ def click_login_button(driver):
         (By.XPATH, "//button[@type='submit']"),
         (By.CSS_SELECTOR, "button.btn-submit")
     ]
-
     for by, selector in selectors:
         try:
             element = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((by, selector)))
@@ -77,51 +75,43 @@ def click_login_button(driver):
         except:
             continue
     return False
-def get_driver(options=None):
-    if options is None:
-        options = Options()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--headless")  # Optional
-        options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
-    
-    driver = webdriver.Chrome(options=options)
-    return driver, options.arguments[-1].split('=')[1]  # returning driver and profile path
 
-def  process_user_bot(client_usernamever,weburl):
+def get_driver():
     options = Options()
-
-                     # Create a unique temporary profile to avoid --user-data-dir conflict
-    user_data_dir = tempfile.mkdtemp()
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--headless")  # Optional: Remove if you want GUI
+    options.add_argument("--headless")
+    temp_profile = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={temp_profile}")
+    driver = webdriver.Chrome(options=options)
+    return driver
 
+def process_user_bot(client_username, weburl):
     site_data = find_user_by_weburl(weburl)
     if not site_data:
+        print("❌ No matching site found.")
         return None
-    driver, profile_path = get_driver(options)
 
-    #driver = webdriver.Chrome()
+    driver = get_driver()
     new_password = generate_password()
 
     try:
         driver.get(site_data['weburl'])
-        smart_send_keys(driver, "username", site_data['username'])
-        smart_send_keys(driver, "password", site_data['password'])   
 
+        smart_send_keys(driver, "username", site_data['username'])
+        smart_send_keys(driver, "password", site_data['password'])
         click_login_button(driver)
+
         time.sleep(5)
 
         current_url = driver.current_url.lower()
         if not any(keyword in current_url for keyword in ["dashboard", "home", "panel", "client", "admin"]):
+            print("❌ Login may have failed.")
             return None
 
         if site_data.get("create_client_url"):
             driver.get(site_data["create_client_url"])
-
         else:
             try:
                 WebDriverWait(driver, 10).until(
@@ -131,6 +121,7 @@ def  process_user_bot(client_usernamever,weburl):
                     EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
                 ).click()
             except:
+                print("❌ Could not navigate to client creation.")
                 return None
 
         smart_send_keys(driver, "name", extract_name_from_username(client_username))
@@ -138,7 +129,6 @@ def  process_user_bot(client_usernamever,weburl):
         smart_send_keys(driver, "password", new_password)
         smart_send_keys(driver, "password_confirmation", new_password)
 
-        # Submit
         for xpath in [
             "//button[normalize-space(text())='SUBMIT']",
             "//button[contains(text(),'Submit')]",
@@ -150,6 +140,7 @@ def  process_user_bot(client_usernamever,weburl):
             except:
                 continue
         else:
+            print("❌ Failed to submit form.")
             return None
 
         return {
@@ -159,6 +150,7 @@ def  process_user_bot(client_usernamever,weburl):
         }
 
     except Exception as e:
+        print(f"❌ Error: {str(e)}")
         return None
 
     finally:
