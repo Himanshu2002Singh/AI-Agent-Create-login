@@ -8,7 +8,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
-
+from selenium.webdriver.chrome.options import Options
+import shutil 
+import tempfile
 def generate_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%^&*()"
     return ''.join(random.choice(chars) for _ in range(length))
@@ -76,13 +78,29 @@ def click_login_button(driver):
             continue
     return False
 
-def process_user_bot(client_username, weburl):
+def  process_user_bot(client_usernamever,weburl):
+    options = Options()
+
+                     # Create a unique temporary profile to avoid --user-data-dir conflict
+    user_data_dir = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={user_data_dir}")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--headless")  # Optional: Remove if you want GUI
+
     site_data = find_user_by_weburl(weburl)
     if not site_data:
         return None
+    driver, profile_path = get_driver()  # use safe driver
 
-    driver = webdriver.Chrome()
+    #driver = webdriver.Chrome()
     new_password = generate_password()
+
+    try:
+        driver.get(site_data['weburl'])
+        smart_send_keys(driver, "username", site_data['username'])
+        smart_send_keys(driver, "password", site_data['password'])    new_password = generate_password()
 
     try:
         driver.get(site_data['weburl'])
