@@ -94,7 +94,6 @@ def  process_user_bot(client_usernamever,weburl):
 
                      # Create a unique temporary profile to avoid --user-data-dir conflict
     user_data_dir = tempfile.mkdtemp()
-    options.add_argument(f"--user-data-dir={user_data_dir}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-blink-features=AutomationControlled")
