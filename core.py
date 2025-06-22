@@ -77,6 +77,17 @@ def click_login_button(driver):
         except:
             continue
     return False
+def get_driver(options=None):
+    if options is None:
+        options = Options()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--headless")  # Optional
+        options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
+    
+    driver = webdriver.Chrome(options=options)
+    return driver, options.arguments[-1].split('=')[1]  # returning driver and profile path
 
 def  process_user_bot(client_usernamever,weburl):
     options = Options()
@@ -92,7 +103,7 @@ def  process_user_bot(client_usernamever,weburl):
     site_data = find_user_by_weburl(weburl)
     if not site_data:
         return None
-    driver, profile_path = get_driver()  # use safe driver
+    driver, profile_path = get_driver(options)
 
     #driver = webdriver.Chrome()
     new_password = generate_password()
