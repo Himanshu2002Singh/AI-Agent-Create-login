@@ -111,12 +111,8 @@ def  process_user_bot(client_usernamever,weburl):
     try:
         driver.get(site_data['weburl'])
         smart_send_keys(driver, "username", site_data['username'])
-        smart_send_keys(driver, "password", site_data['password'])    new_password = generate_password()
+        smart_send_keys(driver, "password", site_data['password'])   
 
-    try:
-        driver.get(site_data['weburl'])
-        smart_send_keys(driver, "username", site_data['username'])
-        smart_send_keys(driver, "password", site_data['password'])
         click_login_button(driver)
         time.sleep(5)
 
