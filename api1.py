@@ -17,7 +17,7 @@ class ClientRequest(BaseModel):
     client_username: str
     weburl: str
 
-@app.post("/create-client/")
+@app.post("/create-client")
 def create_client(data: ClientRequest):
     result = process_user_bot(data.client_username, data.weburl)
     if result:
