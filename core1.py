@@ -79,14 +79,14 @@ def click_login_button(driver):
 
 def get_chrome_driver():
     options = Options()
-    options.add_argument("--headless")
+    options.add_argument("--headless=new")  # use "new" headless mode for recent Chrome
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
 
     return webdriver.Chrome(options=options)
-
+    
 def process_user_bot(client_username, weburl):
     site_data = find_user_by_weburl(weburl)
     if not site_data:
