@@ -89,14 +89,15 @@ def get_chrome_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
+    options.add_argument("--window-size=1920,1080")
 
     return webdriver.Chrome(options=options)
-
-
 def process_user_bot(client_username, weburl):
+    print(f"[START] Creating client '{client_username}' for '{weburl}'")
+
     site_data = find_user_by_weburl(weburl)
     if not site_data:
+        print("[ERROR] Site data not found in users.json")
         return None
 
     driver = get_chrome_driver()
@@ -104,21 +105,30 @@ def process_user_bot(client_username, weburl):
 
     try:
         driver.get(site_data['weburl'])
+        print("[INFO] Opened login page")
+
         if not smart_send_keys(driver, "username", site_data['username']):
-            raise Exception("Username field not found")
+            print("[ERROR] Username field not found")
+            return None
+
         if not smart_send_keys(driver, "password", site_data['password']):
-            raise Exception("Password field not found")
+            print("[ERROR] Password field not found")
+            return None
+
         if not click_login_button(driver):
-            raise Exception("Login failed")
+            print("[ERROR] Login button not clickable")
+            return None
 
         time.sleep(5)
-
         current_url = driver.current_url.lower()
-        if not any(keyword in current_url for keyword in ["dashboard", "home", "panel", "client", "admin"]):
-            raise Exception("Login possibly failed")
+        print(f"[INFO] Current URL after login: {current_url}")
+        if not any(k in current_url for k in ["dashboard", "home", "panel", "client", "admin"]):
+            print("[ERROR] Login failed — Not redirected to dashboard")
+            return None
 
         if site_data.get("create_client_url"):
             driver.get(site_data["create_client_url"])
+            print("[INFO] Navigated to create client URL")
         else:
             try:
                 WebDriverWait(driver, 10).until(
@@ -127,16 +137,23 @@ def process_user_bot(client_username, weburl):
                 WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
                 ).click()
-            except:
-                raise Exception("Could not reach client creation")
+                print("[INFO] Navigated via menu to client creation")
+            except Exception as e:
+                print("[ERROR] Client creation page navigation failed:", e)
+                return None
 
-        if not all([
-            smart_send_keys(driver, "name", extract_name_from_username(client_username)),
-            smart_send_keys(driver, "username", client_username),
-            smart_send_keys(driver, "password", new_password),
-            smart_send_keys(driver, "password_confirmation", new_password)
-        ]):
-            raise Exception("Form fields missing")
+        if not smart_send_keys(driver, "name", extract_name_from_username(client_username)):
+            print("[ERROR] Name field missing")
+            return None
+        if not smart_send_keys(driver, "username", client_username):
+            print("[ERROR] Username field missing")
+            return None
+        if not smart_send_keys(driver, "password", new_password):
+            print("[ERROR] Password field missing")
+            return None
+        if not smart_send_keys(driver, "password_confirmation", new_password):
+            print("[ERROR] Password confirmation field missing")
+            return None
 
         for xpath in [
             "//button[normalize-space(text())='SUBMIT']",
@@ -145,12 +162,15 @@ def process_user_bot(client_username, weburl):
         ]:
             try:
                 WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, xpath))).click()
+                print("[SUCCESS] Client submitted")
                 break
             except:
                 continue
         else:
-            raise Exception("Submit button not found")
+            print("[ERROR] Submit button not found")
+            return None
 
+        print("[SUCCESS] Client creation completed.")
         return {
             "username": client_username,
             "password": new_password,
@@ -158,8 +178,9 @@ def process_user_bot(client_username, weburl):
         }
 
     except Exception as e:
-        print("Error:", str(e))
+        print("[EXCEPTION]", str(e))
         return None
 
     finally:
         driver.quit()
+
