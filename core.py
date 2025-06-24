@@ -36,7 +36,7 @@ def find_user_by_weburl(weburl, users_json='users.json'):
     return None
 
 
-def smart_send_keys(driver, field_label, value, timeout=10):
+def smart_send_keys(driver, field_label, value, timeout=20):
     selectors = [
         (By.ID, field_label),
         (By.NAME, field_label),
