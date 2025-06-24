@@ -8,7 +8,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-import tempfile
 
 
 def generate_password(length=10):
@@ -23,11 +22,8 @@ def extract_name_from_username(username):
 def extract_base_domain(weburl):
     parsed = urlparse(weburl if weburl.startswith('http') else f'https://{weburl}')
     domain = parsed.netloc or parsed.path
-    domain = domain.lower().strip()
-    parts = domain.split('.')
-    if len(parts) > 2:
-        domain = '.'.join(parts[-2:])
-    return domain
+    parts = domain.lower().strip().split('.')
+    return '.'.join(parts[-2:]) if len(parts) > 2 else domain
 
 
 def find_user_by_weburl(weburl, users_json='users.json'):
@@ -54,8 +50,12 @@ def smart_send_keys(driver, field_label, value, timeout=10):
             elem.clear()
             elem.send_keys(value)
             return True
-        except:
+        except Exception as e:
+            print(f"[WARN] Could not locate input for {field_label} using selector {selector}")
             continue
+
+    driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
+    print(f"[DEBUG] Screenshot saved for '{field_label}' at /tmp/{field_label}_not_found.png")
     return False
 
 
@@ -85,13 +85,16 @@ def click_login_button(driver):
 
 def get_chrome_driver():
     options = Options()
-    options.add_argument("--headless=new")
+    options.add_argument("--headless")  # classic mode for better EC2 compatibility
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     return webdriver.Chrome(options=options)
+
+
 def process_user_bot(client_username, weburl):
     print(f"[START] Creating client '{client_username}' for '{weburl}'")
 
@@ -124,6 +127,7 @@ def process_user_bot(client_username, weburl):
         print(f"[INFO] Current URL after login: {current_url}")
         if not any(k in current_url for k in ["dashboard", "home", "panel", "client", "admin"]):
             print("[ERROR] Login failed — Not redirected to dashboard")
+            driver.save_screenshot("/tmp/failed_login.png")
             return None
 
         if site_data.get("create_client_url"):
@@ -179,8 +183,8 @@ def process_user_bot(client_username, weburl):
 
     except Exception as e:
         print("[EXCEPTION]", str(e))
+        driver.save_screenshot("/tmp/unexpected_exception.png")
         return None
 
     finally:
         driver.quit()
-
