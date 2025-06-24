@@ -55,28 +55,48 @@ def get_driver():
 # Smart Input Handler
 # ====================================
 
-def smart_send_keys(driver, field_label, value, timeout=10):
+def smart_send_keys(driver, field_label, value, timeout=20):
     selectors = [
         (By.ID, field_label),
         (By.NAME, field_label),
         (By.XPATH, f"//input[@placeholder='{field_label}']"),
         (By.XPATH, f"//input[contains(@id, '{field_label.lower()}') or contains(@name, '{field_label.lower()}')]"),
         (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input"),
+        (By.XPATH, "//*[@id='username']"),
         (By.XPATH, "//input[@type='text']")
     ]
+
     for by, selector in selectors:
         try:
             elem = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((by, selector)))
             elem.clear()
             elem.send_keys(value)
-            print(f"[INFO] Sent value to field '{field_label}' using {by} - {selector}")
+            print(f"[INFO] Sent value to element via {by}: {selector}")
             return True
         except Exception as e:
-            print(f"[WARN] Could not find '{field_label}' using {by} - {selector}: {e}")
+            print(f"[DEBUG] Selector failed: {by} => {selector} ({str(e)})")
             continue
+
+    print(f"[ERROR] '{field_label}' field not found. Taking snapshot and showing page input structure.")
+
+    # Save screenshot
     driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
-    print(f"[ERROR] Could not locate '{field_label}'. Screenshot saved.")
+
+    # DEBUG: Print available input elements
+    try:
+        inputs = driver.find_elements(By.TAG_NAME, "input")
+        print(f"\n[DEBUG] Total input fields found: {len(inputs)}")
+        for i, input_elem in enumerate(inputs):
+            id_attr = input_elem.get_attribute("id")
+            name_attr = input_elem.get_attribute("name")
+            placeholder = input_elem.get_attribute("placeholder")
+            type_attr = input_elem.get_attribute("type")
+            print(f"  [{i}] id='{id_attr}' name='{name_attr}' placeholder='{placeholder}' type='{type_attr}'")
+    except Exception as e:
+        print("[ERROR] Could not extract input element info:", str(e))
+
     return False
+
 
 # ====================================
 # Login Button Handler
