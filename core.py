@@ -2,13 +2,13 @@ import json
 import random
 import string
 import time
+import os
 from urllib.parse import urlparse
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-
 
 # ====================================
 # Utility Functions
@@ -26,9 +26,7 @@ def extract_base_domain(weburl):
     domain = parsed.netloc or parsed.path
     domain = domain.lower().strip()
     parts = domain.split('.')
-    if len(parts) > 2:
-        domain = '.'.join(parts[-2:])
-    return domain
+    return '.'.join(parts[-2:]) if len(parts) > 2 else domain
 
 def find_user_by_weburl(weburl, users_json='users.json'):
     base = extract_base_domain(weburl)
@@ -52,7 +50,7 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 # ====================================
-# Smart Input Handler
+# Smart Input Handler with Debug Info
 # ====================================
 
 def smart_send_keys(driver, field_label, value, timeout=20):
@@ -79,10 +77,9 @@ def smart_send_keys(driver, field_label, value, timeout=20):
 
     print(f"[ERROR] '{field_label}' field not found. Taking snapshot and showing page input structure.")
 
-    # Save screenshot
-    driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
+    os.makedirs("debug_output", exist_ok=True)
+    driver.save_screenshot(f"debug_output/{field_label}_not_found.png")
 
-    # DEBUG: Print available input elements
     try:
         inputs = driver.find_elements(By.TAG_NAME, "input")
         print(f"\n[DEBUG] Total input fields found: {len(inputs)}")
@@ -97,9 +94,8 @@ def smart_send_keys(driver, field_label, value, timeout=20):
 
     return False
 
-
 # ====================================
-# Login Button Handler
+# Login Button Handler with Logs
 # ====================================
 
 def click_login_button(driver):
@@ -113,6 +109,7 @@ def click_login_button(driver):
         (By.XPATH, "//button[@type='submit']"),
         (By.CSS_SELECTOR, "button.btn-submit")
     ]
+
     for by, selector in selectors:
         try:
             element = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((by, selector)))
@@ -125,6 +122,7 @@ def click_login_button(driver):
         except Exception as e:
             print(f"[WARN] Login button not found via {by} - {selector}: {e}")
             continue
+
     print("[ERROR] Login button not found")
     return False
 
@@ -134,6 +132,7 @@ def click_login_button(driver):
 
 def process_user_bot(client_username, weburl):
     print(f"[START] Creating client '{client_username}' for '{weburl}'")
+
     site_data = find_user_by_weburl(weburl)
     if not site_data:
         print("[ERROR] Site data not found in users.json")
@@ -144,9 +143,33 @@ def process_user_bot(client_username, weburl):
 
     try:
         driver.get(site_data['weburl'])
-        time.sleep(20)
+        time.sleep(10)  # Wait for page load
 
-        # Save HTML and screenshot for debugging
+        os.makedirs("debug_output", exist_ok=True)
         driver.save_screenshot("debug_output/page_loaded.png")
         with open("debug_output/page_dump.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
+
+        if not smart_send_keys(driver, "username", site_data['username']):
+            return None
+        if not smart_send_keys(driver, "password", site_data['password']):
+            return None
+        if not click_login_button(driver):
+            return None
+
+        time.sleep(5)
+        print("[INFO] Login action completed, current URL:", driver.current_url)
+
+        return {
+            "username": client_username,
+            "password": new_password,
+            "weburl": weburl
+        }
+
+    except Exception as e:
+        print("[EXCEPTION] An error occurred:", str(e))
+        driver.save_screenshot("debug_output/exception.png")
+        return None
+
+    finally:
+        driver.quit()
