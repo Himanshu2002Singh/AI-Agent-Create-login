@@ -7,10 +7,12 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 
-# ==========================
-# HELPER FUNCTIONS
-# ==========================
+
+# ====================================
+# Utility Functions
+# ====================================
 
 def generate_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%^&*()"
@@ -37,9 +39,21 @@ def find_user_by_weburl(weburl, users_json='users.json'):
                 return u
     return None
 
-# ==========================
-# SMART SEND KEYS
-# ==========================
+# ====================================
+# Chrome Driver Setup
+# ====================================
+
+def get_driver():
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1920,1080')
+    return webdriver.Chrome(options=options)
+
+# ====================================
+# Smart Input Handler
+# ====================================
 
 def smart_send_keys(driver, field_label, value, timeout=10):
     selectors = [
@@ -58,15 +72,15 @@ def smart_send_keys(driver, field_label, value, timeout=10):
             print(f"[INFO] Sent value to field '{field_label}' using {by} - {selector}")
             return True
         except Exception as e:
-            print(f"[WARN] Could not find '{field_label}' using {by} - {selector} → {e}")
+            print(f"[WARN] Could not find '{field_label}' using {by} - {selector}: {e}")
             continue
     driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
     print(f"[ERROR] Could not locate '{field_label}'. Screenshot saved.")
     return False
 
-# ==========================
-# CLICK LOGIN BUTTON
-# ==========================
+# ====================================
+# Login Button Handler
+# ====================================
 
 def click_login_button(driver):
     selectors = [
@@ -89,28 +103,14 @@ def click_login_button(driver):
             print(f"[INFO] Clicked login button using {by} - {selector}")
             return True
         except Exception as e:
-            print(f"[WARN] Login button not found via {by} - {selector} → {e}")
+            print(f"[WARN] Login button not found via {by} - {selector}: {e}")
             continue
     print("[ERROR] Login button not found")
     return False
 
-# ==========================
-# GET HEADLESS DRIVER
-# ==========================
-
-from selenium.webdriver.chrome.options import Options
-
-def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument('--headless')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--window-size=1920,1080')
-    return webdriver.Chrome(options=chrome_options)
-
-# ==========================
-# MAIN BOT LOGIC
-# ==========================
+# ====================================
+# Main Bot Logic
+# ====================================
 
 def process_user_bot(client_username, weburl):
     print(f"[START] Creating client '{client_username}' for '{weburl}'")
@@ -126,74 +126,8 @@ def process_user_bot(client_username, weburl):
         driver.get(site_data['weburl'])
         time.sleep(2)
 
-        # Save initial page state
+        # Save HTML and screenshot for debugging
         driver.save_screenshot("/tmp/page_loaded.png")
         with open("/tmp/page_dump.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         print("[DEBUG] Page loaded. Screenshot and HTML saved.")
-
-        smart_send_keys(driver, "username", site_data['username'])
-        smart_send_keys(driver, "password", site_data['password'])
-
-        if not click_login_button(driver):
-            print("[ERROR] Login failed")
-            return None
-
-        time.sleep(5)
-        current_url = driver.current_url.lower()
-        print(f"[DEBUG] Current URL after login: {current_url}")
-
-        if not any(keyword in current_url for keyword in ["dashboard", "home", "panel", "client", "admin"]):
-            print("[ERROR] Login didn't redirect to expected page")
-            driver.save_screenshot("/tmp/login_failed.png")
-            return None
-
-        if site_data.get("create_client_url"):
-            driver.get(site_data["create_client_url"])
-        else:
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Clients')]"))
-                ).click()
-                WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
-                ).click()
-            except:
-                print("[ERROR] Could not navigate to client creation page")
-                return None
-
-        smart_send_keys(driver, "name", extract_name_from_username(client_username))
-        smart_send_keys(driver, "username", client_username)
-        smart_send_keys(driver, "password", new_password)
-        smart_send_keys(driver, "password_confirmation", new_password)
-
-        for xpath in [
-            "//button[normalize-space(text())='SUBMIT']",
-            "//button[contains(text(),'Submit')]",
-            "//input[@type='submit' and @value='Submit']"
-        ]:
-            try:
-                WebDriverWait(driver, 15).until(EC.element_to_be_clickable((By.XPATH, xpath))).click()
-                print("[SUCCESS] Client submitted successfully")
-                break
-            except:
-                continue
-        else:
-            print("[ERROR] Submit button not found")
-            return None
-
-        print("[SUCCESS] Client creation complete")
-        return {
-            "username": client_username,
-            "password": new_password,
-            "weburl": weburl
-        }
-
-    except Exception as e:
-        print(f"[EXCEPTION] {str(e)}")
-        driver.save_screenshot("/tmp/unexpected_exception.png")
-        return None
-
-    finally:
-        time.sleep(2)
-        driver.quit()
