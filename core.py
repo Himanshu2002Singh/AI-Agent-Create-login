@@ -3,11 +3,12 @@ import random
 import string
 import time
 from urllib.parse import urlparse
-from selenium import webdriver
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 
 def generate_password(length=10):
@@ -43,10 +44,8 @@ def smart_send_keys(driver, field_label, value, timeout=20):
         (By.XPATH, f"//input[@placeholder='{field_label}']"),
         (By.XPATH, f"//input[contains(@id, '{field_label.lower()}') or contains(@name, '{field_label.lower()}')]"),
         (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input"),
-
-        # Custom fallback selectors
-        (By.XPATH, "//*[@id='username']"),  # ✅ direct match
-        (By.XPATH, "//input[@type='text']"),  # fallback for username
+        (By.XPATH, "//*[@id='username']"),
+        (By.XPATH, "//input[@type='text']")
     ]
 
     for by, selector in selectors:
@@ -56,15 +55,12 @@ def smart_send_keys(driver, field_label, value, timeout=20):
             elem.send_keys(value)
             print(f"[INFO] Sent value to element via {by}: {selector}")
             return True
-        except Exception as e:
-            print(f"[WARN] Could not locate input for {field_label} using selector {selector}")
+        except:
             continue
 
-    screenshot_path = f"/tmp/{field_label}_not_found.png"
-    driver.save_screenshot(screenshot_path)
-    print(f"[DEBUG] Screenshot saved for '{field_label}' at {screenshot_path}")
+    driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
+    print(f"[ERROR] '{field_label}' field not found. Screenshot saved.")
     return False
-
 
 
 def click_login_button(driver):
@@ -78,29 +74,26 @@ def click_login_button(driver):
         (By.XPATH, "//button[@type='submit']"),
         (By.CSS_SELECTOR, "button.btn-submit")
     ]
+
     for by, selector in selectors:
         try:
             element = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((by, selector)))
-            try:
-                element.click()
-            except:
-                driver.execute_script("arguments[0].click();", element)
+            element.click()
             return True
         except:
             continue
+
     return False
 
 
 def get_chrome_driver():
-    options = Options()
-    options.add_argument("--headless")  # classic mode for better EC2 compatibility
+    options = uc.ChromeOptions()
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--start-maximized")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    return webdriver.Chrome(options=options)
+    return uc.Chrome(options=options)
 
 
 def process_user_bot(client_username, weburl):
@@ -116,14 +109,15 @@ def process_user_bot(client_username, weburl):
 
     try:
         driver.get(site_data['weburl'])
-        print("[INFO] Opened login page")
+        time.sleep(3)  # Let page load
+
+        print("[INFO] Page loaded. Saving screenshot for debugging.")
+        driver.save_screenshot("/tmp/page_loaded.png")
 
         if not smart_send_keys(driver, "username", site_data['username']):
-            print("[ERROR] Username field not found")
             return None
 
         if not smart_send_keys(driver, "password", site_data['password']):
-            print("[ERROR] Password field not found")
             return None
 
         if not click_login_button(driver):
@@ -133,6 +127,7 @@ def process_user_bot(client_username, weburl):
         time.sleep(5)
         current_url = driver.current_url.lower()
         print(f"[INFO] Current URL after login: {current_url}")
+
         if not any(k in current_url for k in ["dashboard", "home", "panel", "client", "admin"]):
             print("[ERROR] Login failed — Not redirected to dashboard")
             driver.save_screenshot("/tmp/failed_login.png")
@@ -140,31 +135,21 @@ def process_user_bot(client_username, weburl):
 
         if site_data.get("create_client_url"):
             driver.get(site_data["create_client_url"])
-            print("[INFO] Navigated to create client URL")
         else:
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Clients')]"))
-                ).click()
-                WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
-                ).click()
-                print("[INFO] Navigated via menu to client creation")
-            except Exception as e:
-                print("[ERROR] Client creation page navigation failed:", e)
-                return None
+            WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Clients')]"))
+            ).click()
+            WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
+            ).click()
 
         if not smart_send_keys(driver, "name", extract_name_from_username(client_username)):
-            print("[ERROR] Name field missing")
             return None
         if not smart_send_keys(driver, "username", client_username):
-            print("[ERROR] Username field missing")
             return None
         if not smart_send_keys(driver, "password", new_password):
-            print("[ERROR] Password field missing")
             return None
         if not smart_send_keys(driver, "password_confirmation", new_password):
-            print("[ERROR] Password confirmation field missing")
             return None
 
         for xpath in [
@@ -196,3 +181,20 @@ def process_user_bot(client_username, weburl):
 
     finally:
         driver.quit()
+
+
+# FastAPI Setup
+app = FastAPI()
+
+
+class ClientData(BaseModel):
+    client_username: str
+    weburl: str
+
+
+@app.post("/create-client")
+def create_client(data: ClientData):
+    result = process_user_bot(data.client_username, data.weburl)
+    if result:
+        return {"status": "success", "data": result}
+    return {"status": "error", "message": "Failed to create client"}
