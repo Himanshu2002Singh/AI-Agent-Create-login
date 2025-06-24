@@ -7,14 +7,18 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import os
+from selenium.webdriver.chrome.options import Options
+import tempfile
+
 
 def generate_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%^&*()"
     return ''.join(random.choice(chars) for _ in range(length))
 
+
 def extract_name_from_username(username):
     return username[:4].capitalize()
+
 
 def extract_base_domain(weburl):
     parsed = urlparse(weburl if weburl.startswith('http') else f'https://{weburl}')
@@ -25,6 +29,7 @@ def extract_base_domain(weburl):
         domain = '.'.join(parts[-2:])
     return domain
 
+
 def find_user_by_weburl(weburl, users_json='users.json'):
     base = extract_base_domain(weburl)
     with open(users_json, 'r', encoding='utf-8') as file:
@@ -33,6 +38,7 @@ def find_user_by_weburl(weburl, users_json='users.json'):
             if extract_base_domain(u['weburl']) == base:
                 return u
     return None
+
 
 def smart_send_keys(driver, field_label, value, timeout=10):
     selectors = [
@@ -52,6 +58,7 @@ def smart_send_keys(driver, field_label, value, timeout=10):
             continue
     return False
 
+
 def click_login_button(driver):
     selectors = [
         (By.ID, "login_btn_admin"),
@@ -63,7 +70,6 @@ def click_login_button(driver):
         (By.XPATH, "//button[@type='submit']"),
         (By.CSS_SELECTOR, "button.btn-submit")
     ]
-
     for by, selector in selectors:
         try:
             element = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((by, selector)))
@@ -76,28 +82,43 @@ def click_login_button(driver):
             continue
     return False
 
+
+def get_chrome_driver():
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument(f"--user-data-dir={tempfile.mkdtemp()}")
+
+    return webdriver.Chrome(options=options)
+
+
 def process_user_bot(client_username, weburl):
     site_data = find_user_by_weburl(weburl)
     if not site_data:
         return None
 
-    driver = webdriver.Chrome()
+    driver = get_chrome_driver()
     new_password = generate_password()
 
     try:
         driver.get(site_data['weburl'])
-        smart_send_keys(driver, "username", site_data['username'])
-        smart_send_keys(driver, "password", site_data['password'])
-        click_login_button(driver)
+        if not smart_send_keys(driver, "username", site_data['username']):
+            raise Exception("Username field not found")
+        if not smart_send_keys(driver, "password", site_data['password']):
+            raise Exception("Password field not found")
+        if not click_login_button(driver):
+            raise Exception("Login failed")
+
         time.sleep(5)
 
         current_url = driver.current_url.lower()
         if not any(keyword in current_url for keyword in ["dashboard", "home", "panel", "client", "admin"]):
-            return None
+            raise Exception("Login possibly failed")
 
         if site_data.get("create_client_url"):
             driver.get(site_data["create_client_url"])
-
         else:
             try:
                 WebDriverWait(driver, 10).until(
@@ -107,14 +128,16 @@ def process_user_bot(client_username, weburl):
                     EC.element_to_be_clickable((By.XPATH, "//a[contains(text(),'Add Client') or contains(text(),'Create')]"))
                 ).click()
             except:
-                return None
+                raise Exception("Could not reach client creation")
 
-        smart_send_keys(driver, "name", extract_name_from_username(client_username))
-        smart_send_keys(driver, "username", client_username)
-        smart_send_keys(driver, "password", new_password)
-        smart_send_keys(driver, "password_confirmation", new_password)
+        if not all([
+            smart_send_keys(driver, "name", extract_name_from_username(client_username)),
+            smart_send_keys(driver, "username", client_username),
+            smart_send_keys(driver, "password", new_password),
+            smart_send_keys(driver, "password_confirmation", new_password)
+        ]):
+            raise Exception("Form fields missing")
 
-        # Submit
         for xpath in [
             "//button[normalize-space(text())='SUBMIT']",
             "//button[contains(text(),'Submit')]",
@@ -126,7 +149,7 @@ def process_user_bot(client_username, weburl):
             except:
                 continue
         else:
-            return None
+            raise Exception("Submit button not found")
 
         return {
             "username": client_username,
@@ -135,8 +158,8 @@ def process_user_bot(client_username, weburl):
         }
 
     except Exception as e:
+        print("Error:", str(e))
         return None
 
     finally:
-        time.sleep(3)
         driver.quit()
