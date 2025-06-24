@@ -127,7 +127,7 @@ def process_user_bot(client_username, weburl):
         time.sleep(2)
 
         # Save HTML and screenshot for debugging
-        driver.save_screenshot("/tmp/page_loaded.png")
-        with open("/tmp/page_dump.html", "w", encoding="utf-8") as f:
+        driver.save_screenshot("debug_output/page_loaded.png")
+        with open("debug_output/page_dump.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
-        print("[DEBUG] Page loaded. Screenshot and HTML saved.")
+
