@@ -124,7 +124,7 @@ def process_user_bot(client_username, weburl):
 
     try:
         driver.get(site_data['weburl'])
-        time.sleep(2)
+        time.sleep(20)
 
         # Save HTML and screenshot for debugging
         driver.save_screenshot("debug_output/page_loaded.png")
