@@ -42,21 +42,29 @@ def smart_send_keys(driver, field_label, value, timeout=10):
         (By.NAME, field_label),
         (By.XPATH, f"//input[@placeholder='{field_label}']"),
         (By.XPATH, f"//input[contains(@id, '{field_label.lower()}') or contains(@name, '{field_label.lower()}')]"),
-        (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input")
+        (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input"),
+
+        # Custom fallback selectors
+        (By.XPATH, "//*[@id='username']"),  # ✅ direct match
+        (By.XPATH, "//input[@type='text']"),  # fallback for username
     ]
+
     for by, selector in selectors:
         try:
             elem = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((by, selector)))
             elem.clear()
             elem.send_keys(value)
+            print(f"[INFO] Sent value to element via {by}: {selector}")
             return True
         except Exception as e:
             print(f"[WARN] Could not locate input for {field_label} using selector {selector}")
             continue
 
-    driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
-    print(f"[DEBUG] Screenshot saved for '{field_label}' at /tmp/{field_label}_not_found.png")
+    screenshot_path = f"/tmp/{field_label}_not_found.png"
+    driver.save_screenshot(screenshot_path)
+    print(f"[DEBUG] Screenshot saved for '{field_label}' at {screenshot_path}")
     return False
+
 
 
 def click_login_button(driver):
