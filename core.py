@@ -150,6 +150,8 @@ def process_user_bot(client_username, weburl):
         driver.save_screenshot("debug_output/page_loaded.png")
         with open("debug_output/page_dump.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
+        print('html==>',driver.page_source)
+
 
         # Try switching to iframe if input fields not found
         if not driver.find_elements(By.ID, "username"):
