@@ -49,10 +49,14 @@ def get_driver(headless=False):
     if headless:
         options.add_argument("--headless=new")
 
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--disable-extensions')
+    options.add_argument('--remote-debugging-port=9222')
+
 
     # NOTE: uc.Chrome auto-detects Chrome, avoid passing browser_executable_path unless strictly needed
     driver = uc.Chrome(options=options)
