@@ -1,14 +1,14 @@
 import json
 import time
 import os
+import uuid
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.options import Options
-import tempfile
-import shutil
 
 # ✅ Load admin credentials from users.json
 def load_admin_credentials(filepath='users.json'):
@@ -56,24 +56,12 @@ def navigate_to_downline(driver):
 def search_client(driver, username):
     try:
         print(f"🔍 Searching for client: {username}")
-
-        search_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "search-user"))
-        )
-        driver.execute_script("arguments[0].scrollIntoView(true);", search_box)
-        time.sleep(0.5)
+        search_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "search-user")))
         search_box.clear()
-        time.sleep(0.5)
         search_box.send_keys(username)
-
-        print("🔘 Search input filled.")
-
-        search_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Search')]"))
-        )
+        search_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Search')]")))
         search_button.click()
         print("🔎 Search button clicked.")
-
         time.sleep(2)
 
         candidates = driver.find_elements(By.XPATH, f"//*[contains(text(), '{username}')]")
@@ -82,7 +70,6 @@ def search_client(driver, username):
                 print(f"✅ Found client '{username}'")
                 return True
 
-        print("⚠️ Username text not matched in search result.")
         raise Exception("Client not matched in visible elements.")
 
     except Exception as e:
@@ -92,6 +79,7 @@ def search_client(driver, username):
         with open(f"errors/page_source_{username}.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
         return False
+
 # ✅ Perform deposit or withdrawal
 def perform_transaction(driver, client_username, amount, action_type):
     os.makedirs("errors", exist_ok=True)
@@ -142,10 +130,7 @@ def perform_transaction(driver, client_username, amount, action_type):
         with open(f"errors/page_source_{client_username}_{action_type}.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
 
-# ✅ NEW MAIN ENTRY FUNCTION (for API)
-
-
-# ✅ MAIN ENTRY FUNCTION (for API)
+# ✅ MAIN FUNCTION with Unique User Data Dir
 def process_transaction_request(request_data):
     credentials = load_admin_credentials()
 
@@ -160,19 +145,14 @@ def process_transaction_request(request_data):
     if url not in credentials:
         return {"status": "error", "message": f"Admin credentials not found for URL: {url}"}
 
-    # ✅ Setup Chrome with unique user-data-dir to avoid session conflict
-    chrome_options = Options()
-    
-    # Optional: Enable headless mode if needed
-    # chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    # Setup Chrome Options with unique user-data-dir
+    options = Options()
+    unique_dir = f"/tmp/selenium_profile_{uuid.uuid4()}"
+    options.add_argument(f"--user-data-dir={unique_dir}")
 
-    # ✅ Temporary unique profile folder
-    temp_profile = tempfile.mkdtemp()
-    chrome_options.add_argument(f"--user-data-dir={temp_profile}")
+    service = Service()  # You can specify chromedriver path if needed
 
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=options)
     driver.maximize_window()
 
     try:
@@ -191,4 +171,9 @@ def process_transaction_request(request_data):
 
     finally:
         driver.quit()
-        shutil.rmtree(temp_profile, ignore_errors=True)
+        try:
+            if os.path.exists(unique_dir):
+                import shutil
+                shutil.rmtree(unique_dir)
+        except Exception as cleanup_error:
+            print(f"⚠️ Failed to clean up user data dir: {cleanup_error}")
