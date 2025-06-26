@@ -41,10 +41,7 @@ def find_user_by_weburl(weburl, users_json='users.json'):
 # ===============================
 
 import undetected_chromedriver as uc
-import shutil
-
-import undetected_chromedriver as uc
-import shutil
+from selenium.webdriver.chrome.service import Service
 
 def get_driver(headless=False):
     options = uc.ChromeOptions()
@@ -54,15 +51,16 @@ def get_driver(headless=False):
 
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--remote-debugging-port=9222")  # Force this port
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--window-size=1920,1080")
 
-    chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
-    if not chrome_path:
-        raise FileNotFoundError("Could not locate Chrome or Chromium on this machine.")
+    driver = uc.Chrome(
+        options=options,
+        version_main=137,
+    )
+    return driver
 
-    # Explicitly target version 137
-    return uc.Chrome(options=options, browser_executable_path=chrome_path, version_main=137)
 
 
 
