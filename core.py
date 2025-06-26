@@ -43,25 +43,27 @@ def find_user_by_weburl(weburl, users_json='users.json'):
 import undetected_chromedriver as uc
 import shutil
 
+import undetected_chromedriver as uc
+import shutil
+
 def get_driver(headless=False):
     options = uc.ChromeOptions()
 
     if headless:
         options.add_argument("--headless=new")
 
-    options.add_argument('--headless=new')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--remote-debugging-port=9222')
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-blink-features=AutomationControlled")
 
+    chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
+    if not chrome_path:
+        raise FileNotFoundError("Could not locate Chrome or Chromium on this machine.")
 
-    # NOTE: uc.Chrome auto-detects Chrome, avoid passing browser_executable_path unless strictly needed
-    driver = uc.Chrome(options=options)
+    # Explicitly target version 137
+    return uc.Chrome(options=options, browser_executable_path=chrome_path, version_main=137)
 
-    return driver
 
 
 # ===============================
