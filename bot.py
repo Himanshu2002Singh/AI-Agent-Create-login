@@ -147,6 +147,10 @@ def process_transaction_request(request_data):
 
     # Setup Chrome Options with unique user-data-dir
     options = Options()
+    options.add_argument("--headless=new")  # New headless mode
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     unique_dir = f"/tmp/selenium_profile_{uuid.uuid4()}"
    
 
