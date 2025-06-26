@@ -148,7 +148,7 @@ def process_transaction_request(request_data):
     # Setup Chrome Options with unique user-data-dir
     options = Options()
     unique_dir = f"/tmp/selenium_profile_{uuid.uuid4()}"
-    options.add_argument(f"--user-data-dir={unique_dir}")
+   
 
     service = Service()  # You can specify chromedriver path if needed
 
