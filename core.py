@@ -54,10 +54,6 @@ def get_driver(headless=False):
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--disable-blink-features=AutomationControlled")
 
-    chrome_path = shutil.which("google-chrome") or shutil.which("chromium-browser")
-    if not chrome_path:
-        raise FileNotFoundError("Could not locate Chrome or Chromium on this machine.")
-
     # NOTE: uc.Chrome auto-detects Chrome, avoid passing browser_executable_path unless strictly needed
     driver = uc.Chrome(options=options)
 
