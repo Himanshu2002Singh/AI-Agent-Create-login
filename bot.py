@@ -1,133 +1,194 @@
 import json
-import random
-import string
 import time
-from urllib.parse import urlparse
+import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
+import tempfile
+import shutil
 
-
-# ====================================
-# Utility Functions
-# ====================================
-
-def generate_password(length=10):
-    chars = string.ascii_letters + string.digits + "!@#$%^&*()"
-    return ''.join(random.choice(chars) for _ in range(length))
-
-def extract_name_from_username(username):
-    return username[:4].capitalize()
-
-def extract_base_domain(weburl):
-    parsed = urlparse(weburl if weburl.startswith('http') else f'https://{weburl}')
-    domain = parsed.netloc or parsed.path
-    domain = domain.lower().strip()
-    parts = domain.split('.')
-    if len(parts) > 2:
-        domain = '.'.join(parts[-2:])
-    return domain
-
-def find_user_by_weburl(weburl, users_json='users.json'):
-    base = extract_base_domain(weburl)
-    with open(users_json, 'r', encoding='utf-8') as file:
+# ✅ Load admin credentials from users.json
+def load_admin_credentials(filepath='users.json'):
+    credentials = {}
+    with open(filepath, mode='r') as file:
         users = json.load(file)
-        for u in users:
-            if extract_base_domain(u['weburl']) == base:
-                return u
-    return None
+        for user in users:
+            credentials[user['weburl'].strip()] = (user['username'], user['password'])
+    return credentials
 
-# ====================================
-# Chrome Driver Setup
-# ====================================
+# ✅ Login to the admin panel
+def login(driver, url, username, password):
+    driver.get(url)
+    WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.XPATH, "//input[@name='username']"))).send_keys(username)
+    driver.find_element(By.XPATH, "//input[@name='password']").send_keys(password)
+    driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]").click()
 
-def get_driver():
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080')
-    return webdriver.Chrome(options=options)
-
-# ====================================
-# Smart Input Handler
-# ====================================
-
-def smart_send_keys(driver, field_label, value, timeout=10):
-    selectors = [
-        (By.ID, field_label),
-        (By.NAME, field_label),
-        (By.XPATH, f"//input[@placeholder='{field_label}']"),
-        (By.XPATH, f"//input[contains(@id, '{field_label.lower()}') or contains(@name, '{field_label.lower()}')]"),
-        (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input"),
-        (By.XPATH, "//input[@type='text']")
-    ]
-    for by, selector in selectors:
-        try:
-            elem = WebDriverWait(driver, timeout).until(EC.presence_of_element_located((by, selector)))
-            elem.clear()
-            elem.send_keys(value)
-            print(f"[INFO] Sent value to field '{field_label}' using {by} - {selector}")
-            return True
-        except Exception as e:
-            print(f"[WARN] Could not find '{field_label}' using {by} - {selector}: {e}")
-            continue
-    driver.save_screenshot(f"/tmp/{field_label}_not_found.png")
-    print(f"[ERROR] Could not locate '{field_label}'. Screenshot saved.")
-    return False
-
-# ====================================
-# Login Button Handler
-# ====================================
-
-def click_login_button(driver):
-    selectors = [
-        (By.ID, "login_btn_admin"),
-        (By.XPATH, "//button[normalize-space(text())='Login']"),
-        (By.XPATH, "//button[normalize-space(text())='Sign In']"),
-        (By.XPATH, "//button[contains(translate(text(), 'SIGNINLOGIN', 'signinlogin'), 'login')]"),
-        (By.XPATH, "//input[@type='submit' and @value='Login']"),
-        (By.XPATH, "//input[@type='submit' and @value='Sign In']"),
-        (By.XPATH, "//button[@type='submit']"),
-        (By.CSS_SELECTOR, "button.btn-submit")
-    ]
-    for by, selector in selectors:
-        try:
-            element = WebDriverWait(driver, 6).until(EC.element_to_be_clickable((by, selector)))
-            try:
-                element.click()
-            except:
-                driver.execute_script("arguments[0].click();", element)
-            print(f"[INFO] Clicked login button using {by} - {selector}")
-            return True
-        except Exception as e:
-            print(f"[WARN] Login button not found via {by} - {selector}: {e}")
-            continue
-    print("[ERROR] Login button not found")
-    return False
-
-# ====================================
-# Main Bot Logic
-# ====================================
-
-def process_user_bot(client_username, weburl):
-    print(f"[START] Creating client '{client_username}' for '{weburl}'")
-    site_data = find_user_by_weburl(weburl)
-    if not site_data:
-        print("[ERROR] Site data not found in users.json")
-        return None
-
-    driver = get_driver()
-    new_password = generate_password()
-
+# ✅ Navigate to Client List → Down-line
+def navigate_to_downline(driver):
     try:
-        driver.get(site_data['weburl'])
-        time.sleep(20)
+        print("🧭 Navigating to 'Down-line' section...")
+        client_list_trigger = WebDriverWait(driver, 15).until(
+            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Client List')] | //span[normalize-space()='Client List']"))
+        )
+        time.sleep(0.5)
+        client_list_trigger.click()
+        print("✅ Clicked on 'Client List'")
 
-        # Save HTML and screenshot for debugging
-        driver.save_screenshot("debug_output/page_loaded.png")
-        with open("debug_output/page_dump.html", "w", encoding="utf-8") as f:
+        downline_link = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//ul[@id='listUser']//a[contains(., 'Down-line')] | //span[contains(text(), 'Down Line')]"))
+        )
+        time.sleep(0.3)
+        downline_link.click()
+        print("✅ Clicked on 'Down-line'")
+
+    except TimeoutException:
+        print("❌ Timeout waiting for 'Client List' or 'Down-line'")
+        os.makedirs("errors", exist_ok=True)
+        driver.save_screenshot("errors/timeout_error.png")
+        with open("errors/page_source_on_timeout.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        raise
+
+# ✅ Search for client
+def search_client(driver, username):
+    try:
+        print(f"🔍 Searching for client: {username}")
+
+        search_box = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "search-user"))
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", search_box)
+        time.sleep(0.5)
+        search_box.clear()
+        time.sleep(0.5)
+        search_box.send_keys(username)
+
+        print("🔘 Search input filled.")
+
+        search_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Search')]"))
+        )
+        search_button.click()
+        print("🔎 Search button clicked.")
+
+        time.sleep(2)
+
+        candidates = driver.find_elements(By.XPATH, f"//*[contains(text(), '{username}')]")
+        for element in candidates:
+            if username.lower() in element.text.lower():
+                print(f"✅ Found client '{username}'")
+                return True
+
+        print("⚠️ Username text not matched in search result.")
+        raise Exception("Client not matched in visible elements.")
+
+    except Exception as e:
+        print(f"❌ Client search failed: {e}")
+        os.makedirs("errors", exist_ok=True)
+        driver.save_screenshot(f"errors/error_{username}.png")
+        with open(f"errors/page_source_{username}.html", "w", encoding="utf-8") as f:
+            f.write(driver.page_source)
+        return False
+# ✅ Perform deposit or withdrawal
+def perform_transaction(driver, client_username, amount, action_type):
+    os.makedirs("errors", exist_ok=True)
+    try:
+        print(f"⚙️ Performing {action_type} for {client_username}...")
+        rows = driver.find_elements(By.XPATH, "//table//tr")
+        found = False
+
+        for row in rows:
+            if client_username.lower() in row.text.lower():
+                found = True
+                try:
+                    if action_type == "deposit":
+                        button = row.find_element(By.XPATH, ".//a[contains(@class, 'btn_deposit') and contains(text(), 'Bank Deposit')] | .//a[normalize-space(text())='Deposit']")
+                    elif action_type == "withdraw":
+                        button = row.find_element(By.XPATH, ".//a[contains(@class, 'btn_withdraw') and contains(text(), 'Bank Withdraw')] | .//a[normalize-space(text())='Withdraw']")
+                    else:
+                        raise ValueError(f"Invalid action type: {action_type}")
+
+                    driver.execute_script("arguments[0].scrollIntoView(true);", button)
+                    WebDriverWait(driver, 10).until(EC.element_to_be_clickable(button))
+                    button.click()
+                    print(f"✅ Clicked {action_type} button for {client_username}")
+                except Exception as e:
+                    raise Exception(f"Failed to click {action_type} button: {e}")
+                break
+
+        if not found:
+            print(f"❌ Client '{client_username}' not found.")
+            return
+
+        input_box = WebDriverWait(driver, 10).until(EC.presence_of_element_located((
+            By.XPATH, "//input[(@id='amount' and contains(@placeholder, 'Chips')) or contains(@placeholder, 'Deposit') or contains(@placeholder, 'Withdraw') or contains(@id, 'deposit_chips') or contains(@id, 'withdraw_chips')]"
+        )))
+        input_box.clear()
+        input_box.send_keys(str(amount))
+
+        update_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((
+            By.XPATH, "//button[@type='submit' and contains(text(), 'Update')]"
+        )))
+        update_button.click()
+
+        print(f"✅ {action_type.capitalize()} ₹{amount} → {client_username}")
+
+    except Exception as e:
+        print(f"❌ Failed to {action_type} → {client_username}: {e}")
+        driver.save_screenshot(f"errors/failed_{client_username}_{action_type}.png")
+        with open(f"errors/page_source_{client_username}_{action_type}.html", "w", encoding="utf-8") as f:
             f.write(driver.page_source)
 
+# ✅ NEW MAIN ENTRY FUNCTION (for API)
+
+
+# ✅ MAIN ENTRY FUNCTION (for API)
+def process_transaction_request(request_data):
+    credentials = load_admin_credentials()
+
+    url = request_data.get('url')
+    username = request_data.get('username')
+    amount = request_data.get('amount')
+    action_type = request_data.get('type').lower()
+
+    if action_type not in ['deposit', 'withdraw']:
+        return {"status": "error", "message": f"Invalid action type: {action_type}"}
+
+    if url not in credentials:
+        return {"status": "error", "message": f"Admin credentials not found for URL: {url}"}
+
+    # ✅ Setup Chrome with unique user-data-dir to avoid session conflict
+    chrome_options = Options()
+    
+    # Optional: Enable headless mode if needed
+    # chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # ✅ Temporary unique profile folder
+    temp_profile = tempfile.mkdtemp()
+    chrome_options.add_argument(f"--user-data-dir={temp_profile}")
+
+    driver = webdriver.Chrome(options=chrome_options)
+    driver.maximize_window()
+
+    try:
+        login(driver, url, *credentials[url])
+        navigate_to_downline(driver)
+        time.sleep(1)
+
+        if search_client(driver, username):
+            perform_transaction(driver, username, amount, action_type)
+            return {"status": "success", "message": f"{action_type.capitalize()} ₹{amount} for {username} complete"}
+        else:
+            return {"status": "error", "message": f"Client '{username}' not found"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+    finally:
+        driver.quit()
+        shutil.rmtree(temp_profile, ignore_errors=True)
