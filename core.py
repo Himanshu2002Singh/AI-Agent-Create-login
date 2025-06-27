@@ -64,14 +64,19 @@ def smart_send_keys(driver, field_label, value, timeout=20):
     selectors = [
         (By.ID, field_label),
         (By.NAME, field_label),
+        (By.XPATH, f"//input[@id='{field_label}']"),
+        (By.XPATH, f"//input[@name='{field_label}']"),
+        (By.XPATH, f"//input[contains(@id, '{field_label}')]"),
+        (By.XPATH, f"//input[contains(@name, '{field_label}')]"),
         (By.XPATH, f"//input[@placeholder='{field_label}']"),
-        (By.XPATH, f"//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{field_label.lower()}')]"),
-        (By.XPATH, f"//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{field_label.lower()}')]"),
+        (By.XPATH, f"//label[@for='{field_label}']/following-sibling::input"),
         (By.XPATH, f"//label[contains(text(), '{field_label}')]/following-sibling::input"),
         (By.XPATH, f"//label[contains(text(), '{field_label}')]/../input"),
         (By.XPATH, "//input[@type='text']"),
         (By.XPATH, "//input[@type='email']"),
         (By.XPATH, "//input[@type='password']"),
+        (By.XPATH, f"//input[translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = '{field_label.lower()}']")
+
     ]
 
     for by, selector in selectors:
@@ -179,6 +184,8 @@ def process_user_bot(client_username, weburl):
         print("[ERROR] Site data not found in users.json")
         return None
 
+    print("[DEBUG] Site data loaded:", site_data)
+
     driver = get_driver(headless=False)
     new_password = generate_password()
 
@@ -226,8 +233,8 @@ def process_user_bot(client_username, weburl):
         print("[INFO] Login successful. Current URL:", driver.current_url)
 
         # 4. Navigate to 'Create Client' page using provided URL
-        if 'client_creation_url' in site_data:
-            create_url = site_data['client_creation_url']
+        create_url = site_data.get('create_client_url')
+        if create_url:
             try:
                 driver.get(create_url)
                 print(f"[INFO] Navigated to create user page: {create_url}")
@@ -236,28 +243,52 @@ def process_user_bot(client_username, weburl):
                 print(f"[ERROR] Failed to open client creation URL: {e}")
                 return None
         else:
-            print("[ERROR] client_creation_url not found in users.json for this website.")
+            print("[ERROR] create_client_url not found in users.json for this website.")
             return None
 
-        # 5. Fill and submit Create User form
+        # 5. Fill Create User form
+        client_name = extract_name_from_username(client_username)
+
+        if not smart_send_keys(driver, "name", client_name):
+            print("[ERROR] Name input not found.")
+            return None
         if not smart_send_keys(driver, "username", client_username):
             return None
         if not smart_send_keys(driver, "password", new_password):
             return None
-        if not smart_send_keys(driver, "confirm_password", new_password):
+        if not smart_send_keys(driver, "password_confirmation", new_password):
             return None
 
-        try:
-            submit = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Create')]"))
-            )
-            submit.click()
-            print("[INFO] Client creation submitted.")
-            time.sleep(3)
-            driver.save_screenshot("debug_output/client_created.png")
-        except Exception as e:
-            print(f"[ERROR] Failed to click create button: {e}")
+        
+
+        driver.save_screenshot("debug_output/form_filled.png")
+
+        # 6. Submit form (updated block with fallbacks and exact XPath)
+        submit_selectors = [
+            (By.XPATH, "//input[@type='submit']"),
+            (By.XPATH, "//button[@type='submit']"),
+            (By.XPATH, "//button[contains(text(), 'Create')]"),
+            (By.XPATH, "/html/body/main/div/div/div/div/div/div/div/form/div[7]/input"),  # Your exact path
+        ]
+
+        for by, selector in submit_selectors:
+            try:
+                submit = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((by, selector)))
+                try:
+                    submit.click()
+                except:
+                    driver.execute_script("arguments[0].click();", submit)
+                print(f"[INFO] Submit button clicked using {by} => {selector}")
+                break
+            except Exception as e:
+                print(f"[DEBUG] Click failed: {by} => {selector}: {e}")
+        else:
+            print("[ERROR] Failed to click submit button.")
+            driver.save_screenshot("debug_output/create_button_not_found.png")
             return None
+
+        time.sleep(3)
+        driver.save_screenshot("debug_output/client_created.png")
 
         return {
             "username": client_username,
